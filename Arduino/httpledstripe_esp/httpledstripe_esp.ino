@@ -179,6 +179,35 @@ void loop() {
             stripe_show();
             isGet = true;
           }
+          // TOGGLE PIXEL RANGE url should be GET /togglerange/x,y/rrr,ggg,bbb
+          if (inputLine.length() > 3 && inputLine.substring(0,17) == F("GET /togglerange/")) {
+            int slash = inputLine.indexOf('/', 17 );
+            int komma1 = inputLine.indexOf(',');
+            int x = inputLine.substring(17, komma1).toInt();
+            int y = inputLine.substring(komma1+1, slash).toInt();
+            int urlend = inputLine.indexOf(' ', 17 );
+            String getParam = inputLine.substring(slash+1,urlend+1);
+            komma1 = getParam.indexOf(',');
+            int komma2 = getParam.indexOf(',',komma1+1);
+            redLevel = getParam.substring(0,komma1).toInt();
+            greenLevel = getParam.substring(komma1+1,komma2).toInt();
+            blueLevel = getParam.substring(komma2+1).toInt();
+            uint32_t newcolor = stripe_color(redLevel,greenLevel,blueLevel);
+            //Serial.printf("Got togglerange with %i%i,%i%i%i\n",x,y,redLevel,greenLevel,blueLevel); 
+            // get old status
+            int ledon = 0;
+            int ledoff = 0;
+            for(int i=x; i<=y; i++) {
+              if (stripe_getPixelColor(i) != 0) ledon++;
+              else ledoff++;
+              if(ledon>=ledoff) newcolor = 0; // switch off
+            }
+            for(int i=x; i<=y; i++) {
+              stripe_setPixelColor(i, newcolor);
+            }
+            stripe_show();
+            isGet = true;
+          }
           // POST PIXEL DATA
           if (inputLine.length() > 3 && inputLine.substring(0,10) == F("POST /leds")) {
             isPost = true;
