@@ -193,7 +193,6 @@ void loop() {
             greenLevel = getParam.substring(komma1+1,komma2).toInt();
             blueLevel = getParam.substring(komma2+1).toInt();
             uint32_t newcolor = stripe_color(redLevel,greenLevel,blueLevel);
-            //Serial.printf("Got togglerange with %i%i,%i%i%i\n",x,y,redLevel,greenLevel,blueLevel); 
             // get old status
             int ledon = 0;
             int ledoff = 0;
