@@ -25,6 +25,7 @@ use HTTP::Request;
 use LWP::UserAgent;
 use Switch;
 use Color;
+use SetExtensions;
 require 'HttpUtils.pm';
 
 my @gets = ('led_count','leds_on','rgb','delay','brightness');
@@ -51,22 +52,25 @@ sub LEDStripe_Set($@)
   my $URL = "http://" . $remote_ip . (defined $remote_port?":".$remote_port:"");
 
   return "no set value specified" if(int(@a) < 2);
-  return "on off play pixel range pixels fire rainbow knightrider sparks white_sparks delay brightness rgb:colorpicker,RGB" if($a[1] eq "?");
+  #return "on off play pixel range pixels fire rainbow knightrider sparks white_sparks delay brightness togglerange rgb:colorpicker,RGB" if($a[1] eq "?");
 
-  shift @a;
+  my $name = shift @a;
   my $command = shift @a;
+  my $commandlist = "on off play pixel range pixels fire rainbow knightrider sparks white_sparks delay brightness togglerange rgb:colorpicker,RGB";
 
-  Log 4, "LEDStripe command: $command";
+  Log3 $hash->{NAME}, 4, "LEDStripe command: $command";
 
+  # on simply repeats last command
   if($command eq "on")
   {
     return "mode is not set" if (!defined($hash->{mode}));
     $command = $hash->{mode};
   }
+
   if($command eq "play")
   {
     my $playfile = AttrVal($hash->{NAME}, "playfile", undef);
-    Log 4, "command on, file: " . $playfile;
+    Log3 $hash->{NAME}, 4, "command on, file: " . $playfile;
     return "playfile attribute is not set" if (!defined($playfile));
     LEDStripe_power($hash,"on");
     $URL .= "/off";
@@ -75,14 +79,14 @@ sub LEDStripe_Set($@)
     undef $hash->{playindex};
     LEDStripe_Timer($hash);
   }
-  if($command eq "off")
+  elsif($command eq "off")
   {
     LEDStripe_closeplayfile($hash);
     $URL .= "/off";
     LEDStripe_request($hash,$URL);
     LEDStripe_power($hash,$command);
   }
-  if($command eq "fire")
+  elsif($command eq "fire")
   {
     LEDStripe_closeplayfile($hash);
     LEDStripe_power($hash,"on");
@@ -90,7 +94,7 @@ sub LEDStripe_Set($@)
     $hash->{mode} = $command;
     LEDStripe_request($hash,$URL);
   }
-  if($command eq "rainbow")
+  elsif($command eq "rainbow")
   {
     LEDStripe_closeplayfile($hash);
     LEDStripe_power($hash,"on");
@@ -98,7 +102,7 @@ sub LEDStripe_Set($@)
     $hash->{mode} = $command;
     LEDStripe_request($hash,$URL);
   }
-  if($command eq "knightrider")
+  elsif($command eq "knightrider")
   {
     LEDStripe_closeplayfile($hash);
     LEDStripe_power($hash,"on");
@@ -106,7 +110,7 @@ sub LEDStripe_Set($@)
     $hash->{mode} = $command;
     LEDStripe_request($hash,$URL);
   }
-  if($command eq "sparks")
+  elsif($command eq "sparks")
   {
     LEDStripe_closeplayfile($hash);
     LEDStripe_power($hash,"on");
@@ -114,7 +118,7 @@ sub LEDStripe_Set($@)
     $hash->{mode} = $command;
     LEDStripe_request($hash,$URL);
   }
-  if($command eq "white_sparks")
+  elsif($command eq "white_sparks")
   {
     LEDStripe_closeplayfile($hash);
     LEDStripe_power($hash,"on");
@@ -122,7 +126,7 @@ sub LEDStripe_Set($@)
     $hash->{mode} = $command;
     LEDStripe_request($hash,$URL);
   }
-  if($command eq "pixel")
+  elsif($command eq "pixel")
   {
     return "Set pixel needs four parameters: <desired_led> <red> <green> <blue>" if ( @a != 4 );
     my $desired_led=$a[0];
@@ -144,12 +148,12 @@ sub LEDStripe_Set($@)
     LEDStripe_closeplayfile($hash);
     LEDStripe_power($hash,"on");
 
-    Log 4, "set command: " . $command ." desired:". $desired_led;
+    Log3 $hash->{NAME}, 4, "set command: " . $command ." desired:". $desired_led;
     $URL .= "/rgb/" . $desired_led . "/" . $red . "," . $green . "," . $blue;
     $hash->{mode} = $command;
     LEDStripe_request($hash,$URL);
   }
-  if($command eq "range")
+  elsif($command eq "range")
   {
     return "Set range needs five parameters: <first_led> <last_led> <red> <green> <blue>" if ( @a != 5 );
     my $first_led=$a[0];
@@ -175,12 +179,53 @@ sub LEDStripe_Set($@)
     LEDStripe_closeplayfile($hash);
     LEDStripe_power($hash,"on");
 
-    Log 4, "set command: " . $command ." desired:". $first_led . " to " . $last_led;
+    Log3 $hash->{NAME}, 4, "set command: " . $command ." desired:". $first_led . " to " . $last_led;
     $URL .= "/range/" . $first_led . "," . $last_led . "/" . $red . "," . $green . "," . $blue;
     $hash->{mode} = $command;
     LEDStripe_request($hash,$URL);
   }
-  if($command eq "rgb")
+  elsif($command eq "togglerange")
+  {
+    my $first_led=0;
+    my $last_led=$hash->{READINGS}{led_count}{VAL} - 1;
+    Log3 $hash->{NAME}, 4, "set togglerange with: ".scalar(@a)." args";
+    if( scalar(@a) >= 2 ) {
+      $first_led=$a[0];
+      $first_led=($first_led=~ m/$reDOUBLE/) ? $1:undef;
+      return "first_led value ".$a[0]." is not a valid number" if (!defined($first_led));
+
+      $last_led=$a[1];
+      $last_led=($last_led=~ m/$reDOUBLE/) ? $1:undef;
+      return "last_led value ".$a[1]." is not a valid number" if (!defined($last_led));
+    }
+
+    my $rgbval;
+    $rgbval = $hash->{READINGS}{rgb}{VAL} if defined($hash->{READINGS}{rgb}{VAL});
+    my $red=oct("0x".substr($rgbval,0,2));
+    my $green=oct("0x".substr($rgbval,2,2));
+    my $blue=oct("0x".substr($rgbval,4,2));
+    if( scalar(@a) >=5 ) {
+      $red=$a[2];
+      $red=($red=~ m/$reDOUBLE/) ? $1:undef;
+      return "red value ".$a[2]." is not a valid number" if (!defined($red));
+
+      $green=$a[3];
+      $green=($green=~ m/$reDOUBLE/) ? $1:undef;
+      return "green value ".$a[3]." is not a valid number" if (!defined($green));
+
+      $blue=$a[4];
+      $blue=($blue=~ m/$reDOUBLE/) ? $1:undef;
+      return "blue value ".$a[4]." is not a valid number" if (!defined($blue));
+    }
+    LEDStripe_closeplayfile($hash);
+    LEDStripe_power($hash,"on");
+
+    Log3 $hash->{NAME}, 4, "set command: " . $command ." desired:". $first_led . " to " . $last_led;
+    $URL .= "/togglerange/" . $first_led . "," . $last_led . "/" . $red . "," . $green . "," . $blue;
+    $hash->{mode} = "rgb";
+    LEDStripe_request($hash,$URL);
+  }
+  elsif($command eq "rgb")
   {
     my $rgbval;
     $rgbval = $hash->{READINGS}{rgb}{VAL} if defined($hash->{READINGS}{rgb}{VAL});
@@ -197,7 +242,7 @@ sub LEDStripe_Set($@)
     LEDStripe_request($hash,$URL);
     readingsSingleUpdate($hash, "rgb", $rgbval, 1);
   }
-  if($command eq "delay")
+  elsif($command eq "delay")
   {
     my $delayval;
     $delayval = $hash->{READINGS}{delay}{VAL} if defined($hash->{READINGS}{delay}{VAL});
@@ -208,7 +253,7 @@ sub LEDStripe_Set($@)
     LEDStripe_request($hash,$URL);
     readingsSingleUpdate($hash, "delay", $delayval, 1);
   }
-  if($command eq "brightness")
+  elsif($command eq "brightness")
   {
     my $brightnessval;
     $brightnessval = $hash->{READINGS}{brightness}{VAL} if defined($hash->{READINGS}{brightness}{VAL});
@@ -219,17 +264,20 @@ sub LEDStripe_Set($@)
     LEDStripe_request($hash,$URL);
     readingsSingleUpdate($hash, "brightness", $brightnessval, 1);
   }
-  if($command eq "pixels")
+  elsif($command eq "pixels")
   {
     return "Set pixels needs a parameter: <pixel_data>" if ( @a != 1 );
     my $pixels=$a[0];
     LEDStripe_closeplayfile($hash);
     LEDStripe_power($hash,"on");
-    Log 4, "set command: " . $command ." with data:". $pixels;
+    Log3 $hash->{NAME}, 4, "set command: " . $command ." with data:". $pixels;
     $URL .= "/leds/";
     $hash->{mode} = $command;
     LEDStripe_postrequest($hash,$URL,$pixels);
   }
+  else {
+		return SetExtensions($hash, $commandlist, $name, $command, @a);
+	}
   return undef;
 }
 
@@ -248,7 +296,7 @@ sub LEDStripe_Define($$)
 
   LEDStripe_request($hash,$URL);
 
-  Log 2, "$hash->{NAME} defined LEDStripe at $hash->{remote_ip}:$hash->{remote_port} ";
+  Log3 $hash->{NAME}, 2, "$hash->{NAME} defined LEDStripe at $hash->{remote_ip}:$hash->{remote_port} ";
 
   return undef;
 }
@@ -259,7 +307,7 @@ sub LEDStripe_Undef($$)
    my ( $hash, $arg ) = @_;
 
    LEDStripe_closeplayfile($hash);
-   Log 3, "--- removed ---";
+   Log3 $hash->{NAME}, 3, "--- removed ---";
    return undef;
 }
 
@@ -279,7 +327,7 @@ sub LEDStripe_Get($@)
     return "LEDStripe_Get: no such reading: $get";
   }
 
-  Log 3, "$args[0] $get => $val";
+  Log3 $hash->{NAME}, 3, "$args[0] $get => $val";
 
   return $val;
 }
@@ -301,11 +349,11 @@ sub LEDStripe_Timer
   my $count=1;
   my $firstline;
 
-  Log 4, "$name entering timer with index $playindex";
+  Log3 $hash->{NAME}, 4, "$name entering timer with index $playindex";
   if (!defined($fh)) {
-    Log 4, "$name timer opening file";
+    Log3 $hash->{NAME}, 4, "$name timer opening file";
     if (!open($fh, '<:encoding(UTF-8)', $playfile)) {
-      Log 1, "Could not open file $playfile";
+      Log3 $hash->{NAME}, 1, "Could not open file $playfile";
       return;
     }
     $hash->{filehash} = $fh;
@@ -328,14 +376,14 @@ sub LEDStripe_Timer
 
   } else {
     if (!($firstline = <$fh>)) {
-      Log 4, "$name file end reached";
+      Log3 $hash->{NAME}, 4, "$name file end reached";
       if (AttrVal($hash->{NAME}, "repeat", 0) == 1) {
-        Log 4, "$name resuming file";
+        Log3 $hash->{NAME}, 4, "$name resuming file";
         seek ($fh,0,SEEK_SET);
         $firstline = <$fh>;
         $playindex=2;
       } else {
-        Log 4, "$name stopping play";
+        Log3 $hash->{NAME}, 4, "$name stopping play";
         undef $hash->{playindex};
         LEDStripe_closeplayfile();
         if ($hash->{STATE} eq "off") {
@@ -388,7 +436,7 @@ sub LEDStripe_request
   my ($hash, $URL) = @_;
   my %readings = ();
 
-  Log 4, "LEDStripe request: $URL";
+  Log3 $hash->{NAME}, 4, "LEDStripe request: $URL";
 
   my $agent = LWP::UserAgent->new( env_proxy => 1, keep_alive => 1, timeout => 3 );
   my $header = HTTP::Request->new( GET => $URL );
@@ -398,7 +446,7 @@ sub LEDStripe_request
   if (!$response->is_success)
   {
     my $err_log = "Can't get $URL -- " . $response->status_line;
-    Log 1, $err_log;
+    Log3 $hash->{NAME}, 1, $err_log;
     $hash->{STATE} = "FAIL";
     return $err_log;
   }
@@ -407,7 +455,7 @@ sub LEDStripe_request
 
   $result =~ s/^\s+|\s+$//g;
 
-  Log 4, "LEDStripe response: " . $result;
+  Log3 $hash->{NAME}, 4, "LEDStripe response: " . $result;
 
   readingsBeginUpdate($hash);
 
@@ -435,7 +483,7 @@ sub LEDStripe_postrequest
   my ($hash, $URL, $post_data) = @_;
   my %readings = ();
 
-  Log 4, "LEDStripe POST request: $URL";
+  Log3 $hash->{NAME}, 4, "LEDStripe POST request: $URL";
 
   my $agent = LWP::UserAgent->new( env_proxy => 1, keep_alive => 1, timeout => 3 );
   my $header = HTTP::Request->new( POST => $URL );
@@ -449,7 +497,7 @@ sub LEDStripe_postrequest
   if (!$response->is_success)
   {
     my $err_log = "Can't post to $URL -- " . $response->status_line;
-    Log 1, $err_log;
+    Log3 $hash->{NAME}, 1, $err_log;
     return $err_log;
   }
 
@@ -457,7 +505,7 @@ sub LEDStripe_postrequest
 
   $result =~ s/^\s+|\s+$//g;
 
-  Log 4, "LEDStripe response: " . $result;
+  Log3 $hash->{NAME}, 4, "LEDStripe response: " . $result;
 
   readingsBeginUpdate($hash);
 
