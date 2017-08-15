@@ -56,7 +56,7 @@ sub LEDStripe_Set($@)
 
   my $name = shift @a;
   my $command = shift @a;
-  my $commandlist = "on off play pixel range pixels fire rainbow knightrider sparks white_sparks delay brightness togglerange rgb:colorpicker,RGB";
+  my $commandlist = "on off play pixel range pixels fire rainbow knightrider sparks white_sparks delay transitionsteps brightness togglerange rgb:colorpicker,RGB";
 
   Log3 $hash->{NAME}, 4, "LEDStripe command: $command";
 
@@ -252,6 +252,17 @@ sub LEDStripe_Set($@)
     $hash->{mode} = $command;
     LEDStripe_request($hash,$URL);
     readingsSingleUpdate($hash, "delay", $delayval, 1);
+  }
+  elsif($command eq "transitionsteps")
+  {
+    my $transitionstepsval;
+    $transitionstepsval = $hash->{READINGS}{transitionsteps}{VAL} if defined($hash->{READINGS}{transitionsteps}{VAL});
+    $transitionstepsval = $a[0] if ( @a == 1 );
+    return "Set transitionsteps needs a value parameter: <num of steps> e.g. 50" if !defined($transitionstepsval);
+    $URL .= "/transitionsteps/$transitionstepsval";
+    $hash->{mode} = "rgb";
+    LEDStripe_request($hash,$URL);
+    readingsSingleUpdate($hash, "transitionsteps", $transitionstepsval, 1);
   }
   elsif($command eq "brightness")
   {

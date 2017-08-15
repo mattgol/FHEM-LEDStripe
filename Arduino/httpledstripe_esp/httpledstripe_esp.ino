@@ -34,6 +34,9 @@ uint16_t rainbowColor=0;
 uint16_t delay_interval=50;
 
 int cur_step=0;
+uint32_t lasteffect;
+uint32_t delaytonext;
+int transitionsteps = 20;
 
 // setup network and output pins
 void setup() {
@@ -63,6 +66,9 @@ Serial.println();
   Serial.println("WiFi connected"); 
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+    
+  lasteffect = millis();
+  delaytonext = 0;
   server.begin();
  
 }
@@ -105,7 +111,8 @@ void loop() {
               break;
           }
           if (--postDataLength == 0) {
-            stripe_show();
+            delaytonext=delay_interval;
+            stripe_show(transitionsteps);
             sendOkResponse(client);
             break;
           }
@@ -146,18 +153,25 @@ void loop() {
             greenLevel = getParam.substring(komma1+1,komma2).toInt();
             blueLevel = getParam.substring(komma2+1).toInt();
             stripe_setPixelColor(ledix, stripe_color(redLevel,greenLevel,blueLevel));
-            stripe_show();
+            delaytonext = delay_interval;
+            stripe_show(transitionsteps);
             isGet = true;
           }
           // SET DELAY url should be GET /delay/n
           if (inputLine.length() > 3 && inputLine.substring(0,11) == F("GET /delay/")) {
             delay_interval = inputLine.substring(11).toInt();
+            if(delay_interval<20) delay_interval = 20;
+            isGet = true;
+          }
+          // SET DELAY url should be GET /transitionsteps/n
+          if (inputLine.length() > 3 && inputLine.substring(0,21) == F("GET /transitionsteps/")) {
+            transitionsteps = inputLine.substring(21).toInt();
             isGet = true;
           }
           // SET BRIGHTNESS url should be GET /brightness/n
           if (inputLine.length() > 3 && inputLine.substring(0,16) == F("GET /brightness/")) {
             stripe_setBrightness(inputLine.substring(16).toInt());
-            stripe_show();
+            stripe_show(1);
             isGet = true;
           }
           // SET PIXEL RANGE url should be GET /range/x,y/rrr,ggg,bbb
@@ -176,7 +190,8 @@ void loop() {
             for(int i=x; i<=y; i++) {
               stripe_setPixelColor(i, stripe_color(redLevel,greenLevel,blueLevel));
             }
-            stripe_show();
+            delaytonext = delay_interval;
+            stripe_show(transitionsteps);
             isGet = true;
           }
           // TOGGLE PIXEL RANGE url should be GET /togglerange/x,y/rrr,ggg,bbb
@@ -204,7 +219,8 @@ void loop() {
             for(int i=x; i<=y; i++) {
               stripe_setPixelColor(i, newcolor);
             }
-            stripe_show();
+            delaytonext = delay_interval;
+            stripe_show(transitionsteps);
             isGet = true;
           }
           // POST PIXEL DATA
@@ -216,6 +232,21 @@ void loop() {
           }
           // SET ALL PIXELS OFF url should be GET /off
           if (inputLine.length() > 3 && inputLine.substring(0,8) == F("GET /off")) {
+            for(int i=0; i<stripe_numPixels(); i++) {
+              stripe_setPixelColor(i, 0);
+            }
+            fire = false;
+            rainbow = false;
+            blinker = false;
+            sparks = false;
+            white_sparks = false;
+            knightrider = false;
+            delaytonext = delay_interval;
+            stripe_show(transitionsteps);
+            isGet = true;
+          }
+          // SET ALL PIXELS OFF immediately, url should be GET /offnew
+          if (inputLine.length() > 3 && inputLine.substring(0,11) == F("GET /offnow")) {
             reset();
             isGet = true;
           }
@@ -233,6 +264,7 @@ void loop() {
             knightrider = false;
             stripe_setBrightness(128);
             isGet = true;
+            delaytonext = 0;
           }
           // SET RAINBOW EFFECT
           if (inputLine.length() > 3 && inputLine.substring(0,12) == F("GET /rainbow")) {
@@ -243,6 +275,7 @@ void loop() {
             knightrider = false;
             stripe_setBrightness(128);
             isGet = true;
+            delaytonext = 0;
           }
           // SET WHITE_SPARKS EFFECT
           if (inputLine.length() > 3 && inputLine.substring(0,17) == F("GET /white_sparks")) {
@@ -253,6 +286,7 @@ void loop() {
             knightrider = false;
             stripe_setBrightness(128);
             isGet = true;
+            delaytonext = 0;
           }
           // SET SPARKS EFFECT
           if (inputLine.length() > 3 && inputLine.substring(0,11) == F("GET /sparks")) {
@@ -263,6 +297,7 @@ void loop() {
             knightrider = false;
             stripe_setBrightness(128);
             isGet = true;
+            delaytonext = 0;
           }
           // SET KNIGHTRIDER EFFECT
           if (inputLine.length() > 3 && inputLine.substring(0,16) == F("GET /knightrider")) {
@@ -273,6 +308,7 @@ void loop() {
             knightrider = true;
             stripe_setBrightness(128);
             isGet = true;
+            delaytonext = 0;
           }
           // SET no_effects
           if (inputLine.length() > 3 && inputLine.substring(0,9) == F("GET /nofx")) {
@@ -282,6 +318,7 @@ void loop() {
             white_sparks = false;
             blinker = false;
             isGet = true;
+            delaytonext = 0;
           }
           if (inputLine.length() > 3 && inputLine.substring(0,11) == F("GET /blink/")) {
             int slash = inputLine.indexOf('/', 11 );
@@ -307,6 +344,7 @@ void loop() {
             sparks = false;
            
             isGet = true;
+            delaytonext = 0;
           }
           inputLine = "";
         }
@@ -323,12 +361,21 @@ void loop() {
     client.stop();
     Serial.println(F("client disconnected"));
   }
-  if (fire) fireEffect();
-  if (rainbow) rainbowCycle();
-  if (blinker) blinkerEffect();
-  if (sparks) sparksEffect();
-  if (white_sparks) white_sparksEffect();
-  if (knightrider) knightriderEffect();
+
+  // check time if next effect is due and start it
+  if(millis()-lasteffect > delaytonext) {
+    lasteffect = millis();
+    if (fire) fireEffect();
+    else if (rainbow) rainbowCycle();
+    else if (blinker) blinkerEffect();
+    else if (sparks) sparksEffect();
+    else if (white_sparks) white_sparksEffect();
+    else if (knightrider) knightriderEffect();
+    else {
+      stripe_nextstep();
+      delaytonext = delay_interval;
+    }      
+  }
 }
 
 // Reset stripe, all LED off and no effects
@@ -337,7 +384,7 @@ void reset() {
     stripe_setPixelColor(i, 0);
   }
   stripe_setBrightness(255);
-  stripe_show();
+  stripe_show(1);
   fire = false;
   rainbow = false;
   blinker = false;
@@ -358,8 +405,8 @@ void fireEffect() {
     if(b1<0) b1=0;
     stripe_setPixelColor(x,stripe_color(r1,g1, b1));
   }
-  stripe_show();
-  delay(random(10,113));
+  stripe_show(1);
+  delaytonext = random(10,113);
 }
 
 // Slightly different, this makes the rainbow equally distributed throughout
@@ -370,21 +417,21 @@ void rainbowCycle() {
   for(i=0; i< stripe_numPixels(); i++) {
     stripe_setPixelColor(i, Wheel(((i * 256 / stripe_numPixels()) + rainbowColor) & 255));
   }
-  stripe_show();
-  delay(delay_interval);
+  stripe_show(1);
+  delaytonext = delay_interval;  
 }
 
 void blinkerEffect() {
  for(int i=xfrom; i<=yto; i++) {
     stripe_setPixelColor(i, stripe_color(myredLevel,mygreenLevel,myblueLevel));
   }
-  stripe_show();
+  stripe_show(1);
  delay(myOn);
  for(int i=xfrom; i<= yto; i++) {
     stripe_setPixelColor(i, stripe_color(0,0,0));
   }
-  stripe_show();
-delay(myOff);
+  stripe_show(1);
+  delaytonext = myOff;
 }
 
 void sparksEffect() {
@@ -398,8 +445,8 @@ void sparksEffect() {
     stripe_dimPixel(i);
   }
 
-  stripe_show();
-  delay(delay_interval);
+  stripe_show(1);
+  delaytonext = delay_interval;
 }
 
 void white_sparksEffect() {
@@ -414,8 +461,8 @@ void white_sparksEffect() {
     stripe_dimPixel(i);
   }
 
-  stripe_show();
-  delay(delay_interval);
+  stripe_show(1);
+  delaytonext = delay_interval;
 }
 
 void knightriderEffect() {
@@ -451,8 +498,8 @@ void knightriderEffect() {
     }
   } 
   
-  stripe_show();
-  delay(delay_interval);
+  stripe_show(1);
+  delaytonext = delay_interval;
 }
 
 // Input a value 0 to 255 to get a color value.
